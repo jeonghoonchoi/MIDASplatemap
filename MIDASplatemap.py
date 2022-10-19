@@ -10,9 +10,11 @@ link - https://pypi.org/project/platemapping/
 
 import numpy as np
 import pandas as pd
-import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import string
 
+dim = {6:(2,3), 12:(3,4), 24:(4,6), 96:(8,12), 384:(16,24)} 
 defaultwell = {'sample_name','row','column','index','injection'}
 defaultplate = {'screen','date'}
 wellfields = {'pcr' : {'volume', 'unit'},'gdna' : {'volume', 'unit','concentration'}, 'kingfisher' : {}, 'postpcr' : {}, 'quantit' : {'dilution_factor','volume', 'unit'}}
@@ -88,7 +90,7 @@ class Well:
         """
         
         if name in self._fields.keys():
-            return self._fields[name].value
+            return self._fields[name]
         else:
             raise TypeError('Field does not exist in Well object')
         
@@ -164,39 +166,26 @@ class Plate:
         self._fields = default
         self._category = category
         self._size = size
-        dim = {6:(2,3), 12:(3,4), 24:(4,6), 96: (8,12), 384: (16,24)}
         if size not in dim.keys():
             self._wells = None
             raise TypeError('Invalid Plate Size')
         else: 
-            wells = [pd.DataFrame(columns=['row','column','index'])]*size
+            wells = []
             letters = list(string.ascii_uppercase)
-            # define rows (note wells defined earlier)
             rows = letters[0:(dim[size])[0]]
-            # list of cell letters
             rowindex = rows*(dim[size])[1]
-            # sorting EITHER rows or columns lists the well ID's in the correct order
             rowindex.sort()
-            
-            # define the correct number of columns according to the well plate
             columns = list(range(1, (dim[size])[1]+1))
-            # list of cell numbers for every well
             columnindex = columns*(dim[size])[0]
-            # dictionary of cell letters (rows) and numbers (columns)
-            cellsdict = {'row':rowindex, 'column':columnindex}
-            df = pd.DataFrame(cellsdict)
-            
-            #working on debugging creating an automatically indexed plate... stuck here. saving wrong indices.
-            for i in range(len(wells)):
-                rowval = df['row'][i]
-                colval = df['column'][i]
-                wells[i]['row']=( rowval)
-                wells[i]['column']=(colval)
-                wells[i]['index']=rowval+colval.astype(str)
-                
-            
-            self._wells = wells
 
+            for i in range(size):
+                temp = Well(category)                
+                temp.__setfield__('row', rowindex[i])
+                temp.__setfield__('column', columnindex[i])
+                temp.__setfield__('index' , rowindex[i]+str( columnindex[i]))
+                wells.append(temp)
+                
+            self._wells = wells
         
     def __getfield__(self, name):
         """Overwrites the attribute getter default function
@@ -220,12 +209,12 @@ class Plate:
                 
             Returns:
                 The value contained in the field
-    
         """
         if name in self._fields.keys():
             return self._fields[name].value
         else:
             raise TypeError('Field does not exist in Well object')
+            
     def get_category(self):
         """Returns the category attribute of the Plate class object
         
@@ -239,50 +228,93 @@ class Plate:
         """
         return self._category
         return self.category
+    
     def get_size(self):
         """Returns the number of wells within the plate
         
             Returns:
                 Integer value of number of wells in plate
         """
-        
         return(self._size)
-        """Returns the size attribute of the Plate class object
         
-            Returns:
-                The integer value of the number of wells within plate object
-        """
-    def print_platemap(self, attr = 'sample_name'):
+    def df_platemap(self, attr = 'sample_name'):
         """Displays specified information of all Well objects in Plate as a pandas DataFrame format organized in the platemap dimensions.
-        
+            Arg:
+                attr(string): the specific field name of interest to be sent as content in the DataFrame. Defaults to sample_name.
             Returns:
-                DataFrame object with information organized
+                df (DataFrame): DataFrame object with information organized
         """
-        dim = {6:(2,3), 12:(3,4), 24:(4,6), 96:(8,12), 384:(16,24)} 
+
         attr_df = [0]*len(self._wells)
         for i in range(len(self._wells)):
             attr_df[i] = self._wells[i]._fields[attr]
         reshaped = np.asarray(attr_df).reshape(dim[self._size])
-        df = pd.DataFrame(reshaped)
+        letters = list(string.ascii_uppercase)
+        rowindex = letters[0:(dim[len(self._wells)])[0]]
+        columnindex = list(range(1, (dim[len(self._wells)])[1]+1))
+        df = pd.DataFrame(reshaped, index = rowindex, columns = columnindex)
+        print(df)
+        
         return df
-    # def printinfo_tabular(self, attr = 'sample_name'):
-    #     """Displays specified information of all Well objects in Plate as a linear tabular DataFrame format.
+    
+    def df_fieldinfo(self, attr = 'sample_name'):
+        """Displays specified information of all Well objects in Plate as a linear tabular DataFrame format.
         
-    #         Args:
-    #             attr (str): string of attribute name
-    #     """
+            Args:
+                attr (str): the specific field name of interest to be sent as content in the DataFrame. Defaults to sample_name.
+            
+            Returns:
+                df (DataFrame): DataFrame of the plate information with index as the well index, and column as attr.
+        """
+        index = []
+        field = []
+        for i in self._wells:
+            index.append(i.__getfield__('index'))
+            field.append(i.__getfield__(attr))
+        df = pd.DataFrame({attr: field}, index = index)
+        print(df)
         
+        return df
         
-    # def printall_tabular():
-                
+    def df_allfields(self):
+        """Organizes all information of each well in Plate and combines it as a linear tabular DataFrame.
+            
+            Returns: 
+                df (DataFrame): DataFrame of the plate information with index as the well index.
+        """ 
+        table = []
+        for i in self._wells:
+            temp = i.df_return()
+            table.append(temp)
+        df = pd.concat(table)
+        df = df.set_index('index')
+        print(df)
+        
+        return df
+    
+    def visualize(self, attr = 'sample_name'):
+        """Provides an image of the visualized format of platemap.
+        
+        Arg: 
+            attr(str): String input of field name(s) to visualize
+        Returns:
+            None.
+        """
+        df = self.df_platemap(attr)
+    
+        fig, ax = plt.subplots(layout="constrained", nrows=dim[self._size()][0],ncols=dim[self._size()][1])   
+        # ax.set_xticklabels([])
+        # ax.set_yticklabels([])
+        # ax.set_title(self._wells[i], fontsize=fontsize)
 def main():
     hello = Well('gdna')
     df = (hello.df_return())
     # print(df)
-    goodbye = Plate('gdna',size = 96)
-    df2 = goodbye.print_platemap('index')
+    goodbye = Plate('gdna',size = 12)
+    df2 = goodbye.df_platemap('index')
+    df3 = goodbye.df_fieldinfo('sample_name')
+    df4 = goodbye.df_allfields()
     # print(goodbye)
     return 0
 
 main()
-        
