@@ -13,11 +13,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import string
+import os
+import csv
 
 dim = {6:(2,3), 12:(3,4), 24:(4,6), 96:(8,12), 384:(16,24)} 
-defaultwell = {'sample_name','row','column','index','injection'}
+defaultwell = {'sample_name','row','column','index'}
 defaultplate = {'screen','date'}
-wellfields = {'pcr' : {'volume', 'unit'},'gdna' : {'volume', 'unit','concentration'}, 'kingfisher' : {}, 'postpcr' : {}, 'quantit' : {'dilution_factor','volume', 'unit'}}
+wellfields = {'pcr' : {'volume_gdna','volume_water', 'unit','injection'},'gdna' : {'volume', 'unit','avg_concentration','injection'}, 'kingfisher' : {'organ_weight','volume_TL','unit','mg_tissue','organ','injection'}, 'p7 index' : {'index_barcode'}, 'quantit' : {'organ','concentration','dilution_factor','volume', 'unit','injection'}}
 platefields = {'pcr' : {'mastermix'},'gdna' : {}, 'kingfisher' : {'sampletype'}, 'postpcr' : {}, 'quantit' : {}}
 
 def _getfields(classname, category):
@@ -137,7 +139,7 @@ class Well:
                 DataFrame object with information organized
         """
         df = pd.DataFrame([self._fields])
-        return df
+        return df   
         
 class Plate:
     """Class for Plate objects.
@@ -280,7 +282,7 @@ class Plate:
         """Organizes all information of each well in Plate and combines it as a linear tabular DataFrame.
             
             Returns: 
-                df (DataFrame): DataFrame of the plate information with index as the well index.
+                df (DataFrame): DataFrame of the plate information with index as the wmetell index.
         """ 
         table = []
         for i in self._wells:
@@ -300,21 +302,70 @@ class Plate:
         Returns:
             None.
         """
-        df = self.df_platemap(attr)
+        df = self.df_platemap('index').values
+        fig = plt.figure(dpi = 150)
+        grid = gridspec.GridSpec(dim[self._size][0]+1, dim[self._size][1]+1, wspace = 0.1, hspace=0.1, figure = fig)
+         # plot row labels in extra row
+        for i in range(1, (dim[self._size][0]+1)):
+            ax = plt.subplot(grid[i, 0])
+            ax.axis('off')
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.text(0.5, 0.5, list(string.ascii_uppercase)[i-1], size = 10, ha = "center", va="center")
+            
+        # plot column labels in extra column
+        for i in range(1, (dim[self._size][1]+1)):
+            ax = plt.subplot(grid[0, i])
+            ax.axis('off')
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.text(0.5, 0.5, list(range(1, (dim[self._size])[1]+1))[i-1], size = 8, ha = "center", va="center")
+        fig.suptitle('{}'.format('Title Example'))
+        for i in range(1, (dim[self._size][1]+1)):
+            for j in range(1, (dim[self._size][0]+1)):
+                ax = plt.subplot(grid[j,i])
+                # ax.axis('off')
+                ax.set_xticklabels([])
+                ax.set_yticklabels([])
+                plt.tick_params(left = False, bottom = False)
+                ax.text(0.5,0.5,df[j-1][i-1] ,color='red',ha = "center", va="center")
+        return fig
     
-        fig, ax = plt.subplots(layout="constrained", nrows=dim[self._size()][0],ncols=dim[self._size()][1])   
-        # ax.set_xticklabels([])
-        # ax.set_yticklabels([])
-        # ax.set_title(self._wells[i], fontsize=fontsize)
+    def readcsv(self, path):
+        # df = pd.read_csv(path, header=None, names=range(8))
+        df = pd.read_csv(path, header=None)
+        table_names = ["metadata", "plate_data"]
+        groups = df[0].isin(table_names).cumsum()
+        tables = {g.iloc[0,0]: g.iloc[1:] for k,g in df.groupby(groups)}
+        
+        metadata = tables['metadata']
+        raw_plate_data = tables['plate_data']
+        #go through the metadata table and make some 
+        
+        metadata_col = list(metadata.iloc[0])
+        metadata_val = list(metadata.iloc[1])
+        
+        plate_info = pd.DataFrame(metadata_val,index=metadata_col).transpose()
+        
+        plate_data_header = list(raw_plate_data.iloc[0])
+        plate_data_value = (raw_plate_data.iloc[1:]).reset_index(inplace=True,drop=True)
+        plate_data_value.se
+        
+        return df
+            
+
+    
 def main():
     hello = Well('gdna')
     df = (hello.df_return())
     # print(df)
-    goodbye = Plate('gdna',size = 12)
+    goodbye = Plate('gdna',size = 96)
     df2 = goodbye.df_platemap('index')
     df3 = goodbye.df_fieldinfo('sample_name')
     df4 = goodbye.df_allfields()
-    # print(goodbye)
+    fig = goodbye.visualize()
+    df5 = goodbye.readcsv(r"C:\Users\jeonghoo\Downloads\M22-S06-Lung-Organ_Weights.csv")
+    
     return 0
 
 main()
