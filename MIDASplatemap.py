@@ -374,10 +374,6 @@ def readcsv(path, well_type):
         temp.df2well(row)
         wells.append(temp)
     
-    # temp_plate = Plate(well_type,24)
-    # temp_plate._wells = wells[0:24]
-    #only takes the first 24 inputs. need to develop a way to make it into a list of different plate obejcts
-    
     
     plate_count = int(len(plate_data_value)/24)+1
     empty_wells = 24-len(plate_data_value)%24
@@ -390,13 +386,13 @@ def readcsv(path, well_type):
             well_list.extend(empty_wells)
             temp_plate = Plate(well_type,24)
             temp_plate._wells = well_list
-            temp_plate._fields['Title'] = 'Plate' + str(i+1)
+            temp_plate._fields['Title'] = 'Plate ' + str(i+1)
             plates[i] = temp_plate
             
         else:
             temp_plate = Plate(well_type,24)
             temp_plate._wells = wells[0+(24*i):24+(24*i)]
-            temp_plate._fields['Title'] = 'Plate' + str(i+1)
+            temp_plate._fields['Title'] = 'Plate ' + str(i+1)
             plates[i] = temp_plate
             
     return plates
