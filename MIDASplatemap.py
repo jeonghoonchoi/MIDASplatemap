@@ -18,8 +18,8 @@ import csv
 
 dim = {6:(2,3), 12:(3,4), 24:(4,6), 96:(8,12), 384:(16,24)} 
 defaultwell = {'sample_name','row','column','index'}
-defaultplate = {'screen','date'}
-wellfields = {'pcr' : {'volume_gdna','volume_water', 'unit','injection'},'gdna' : {'volume', 'unit','avg_concentration','injection'}, 'kingfisher' : {'organ_weight','volume_TL','unit','mg_tissue','organ','injection'}, 'p7 index' : {'index_barcode'}, 'quantit' : {'organ','concentration','dilution_factor','volume', 'unit','injection'}}
+defaultplate = {'screen','date','Title'}
+wellfields = {'pcr' : {'volume_gdna','volume_water', 'unit','injection'},'gdna' : {'volume', 'unit','avg_concentration','injection'}, 'kingfisher' : {'organ_weight','tattoo_number','volume_TL','unit','mg_tissue','organ','injection','cell_number','sample_type','treatment_id','cage','weight_g'}, 'p7 index' : {'index_barcode'}, 'quantit' : {'organ','concentration','dilution_factor','volume', 'unit','injection'}}
 platefields = {'pcr' : {'mastermix'},'gdna' : {}, 'kingfisher' : {'sampletype'}, 'postpcr' : {}, 'quantit' : {}}
 
 def _getfields(classname, category):
@@ -140,6 +140,20 @@ class Well:
         """
         df = pd.DataFrame([self._fields])
         return df   
+    
+    def df2well(self, df):
+        """Returns Well object with information extracted from a pandas DataFrame
+        
+            Returns: 
+                Well object with information organized
+        """
+        fields = list(df.index)
+        for i in fields:
+            header = i.lower()
+            value = list(df.loc[i])
+            value = value[0]
+            self.__setfield__(header, value)
+        
         
 class Plate:
     """Class for Plate objects.
@@ -302,7 +316,7 @@ class Plate:
         Returns:
             None.
         """
-        df = self.df_platemap('index').values
+        df = self.df_platemap(attr).values
         fig = plt.figure(dpi = 150)
         grid = gridspec.GridSpec(dim[self._size][0]+1, dim[self._size][1]+1, wspace = 0.1, hspace=0.1, figure = fig)
          # plot row labels in extra row
@@ -320,7 +334,7 @@ class Plate:
             ax.set_xticklabels([])
             ax.set_yticklabels([])
             ax.text(0.5, 0.5, list(range(1, (dim[self._size])[1]+1))[i-1], size = 8, ha = "center", va="center")
-        fig.suptitle('{}'.format('Title Example'))
+        fig.suptitle('{}'.format(self._fields['Title']))
         for i in range(1, (dim[self._size][1]+1)):
             for j in range(1, (dim[self._size][0]+1)):
                 ax = plt.subplot(grid[j,i])
@@ -331,27 +345,61 @@ class Plate:
                 ax.text(0.5,0.5,df[j-1][i-1] ,color='red',ha = "center", va="center")
         return fig
     
-    def readcsv(self, path):
-        # df = pd.read_csv(path, header=None, names=range(8))
-        df = pd.read_csv(path, header=None)
-        table_names = ["metadata", "plate_data"]
-        groups = df[0].isin(table_names).cumsum()
-        tables = {g.iloc[0,0]: g.iloc[1:] for k,g in df.groupby(groups)}
-        
-        metadata = tables['metadata']
-        raw_plate_data = tables['plate_data']
-        #go through the metadata table and make some 
-        
-        metadata_col = list(metadata.iloc[0])
-        metadata_val = list(metadata.iloc[1])
-        
-        plate_info = pd.DataFrame(metadata_val,index=metadata_col).transpose()
-        
-        plate_data_header = list(raw_plate_data.iloc[0])
-        plate_data_value = (raw_plate_data.iloc[1:]).reset_index(inplace=True,drop=True)
-        plate_data_value.se
-        
-        return df
+
+def readcsv(path, well_type):
+    df = pd.read_csv(path, header=None)
+    table_names = ["metadata", "plate_data"]
+    groups = df[0].isin(table_names).cumsum()
+    tables = {g.iloc[0,0]: g.iloc[1:] for k,g in df.groupby(groups)}
+    
+    metadata = tables['metadata']
+    raw_plate_data = tables['plate_data']
+    #go through the metadata table and make some 
+    
+    metadata_col = list(metadata.iloc[0])
+    metadata_val = list(metadata.iloc[1])
+    
+    plate_info = pd.DataFrame(metadata_val,index=metadata_col).transpose()
+    
+    plate_data_header = list(raw_plate_data.iloc[0])
+    plate_data_value = (raw_plate_data.iloc[1:]).reset_index(drop=True)
+    plate_data_value.columns = plate_data_header
+    
+    wells = []
+    
+    for i in range(len(plate_data_value)):
+        row = plate_data_value.iloc[i]
+        row = pd.DataFrame(row)
+        temp = Well(well_type)
+        temp.df2well(row)
+        wells.append(temp)
+    
+    # temp_plate = Plate(well_type,24)
+    # temp_plate._wells = wells[0:24]
+    #only takes the first 24 inputs. need to develop a way to make it into a list of different plate obejcts
+    
+    
+    plate_count = int(len(plate_data_value)/24)+1
+    empty_wells = 24-len(plate_data_value)%24
+    empty_wells = [Well(well_type)]*empty_wells
+    
+    plates = [0]*plate_count
+    for i in range(len(plates)):
+        if i == plate_count-1:
+            well_list = wells[0+(24*i)::]
+            well_list.extend(empty_wells)
+            temp_plate = Plate(well_type,24)
+            temp_plate._wells = well_list
+            temp_plate._fields['Title'] = 'Plate' + str(i+1)
+            plates[i] = temp_plate
+            
+        else:
+            temp_plate = Plate(well_type,24)
+            temp_plate._wells = wells[0+(24*i):24+(24*i)]
+            temp_plate._fields['Title'] = 'Plate' + str(i+1)
+            plates[i] = temp_plate
+            
+    return plates
             
 
     
@@ -364,7 +412,7 @@ def main():
     df3 = goodbye.df_fieldinfo('sample_name')
     df4 = goodbye.df_allfields()
     fig = goodbye.visualize()
-    df5 = goodbye.readcsv(r"C:\Users\jeonghoo\Downloads\M22-S06-Lung-Organ_Weights.csv")
+    df5 = readcsv(r"/Users/jeonghoonchoi/Desktop/MIDASplatemap/MIDASplatemap/M22-S06-Lung-Organ_Weights.csv",'kingfisher')
     
     return 0
 
